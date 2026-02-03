@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    default: local
+  datasource:
+    url: ${DB_URL}
+    
+    username: ${DB_USER}
+    password: ${DB_PASS}
+    
+    driver-class-name: oracle.jdbc.OracleDriver
+    
+  jackson:
+    serialization:
+      INDENT_OUTPUT: true
+
+# application.yml
+bithumb:
+  api:
+    url: ${BITHUMB_API_URL}
+    key: ${BITHUMB_API_KEY}
+    secret: ${BITHUMB_API_SECRET}
+
+
+    
