@@ -4,6 +4,7 @@ server:
 spring:
   profiles:
     default: local
+
   datasource:
     url: ${DB_URL}
     
