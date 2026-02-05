@@ -11,17 +11,15 @@ import java.time.LocalDateTime;
 public class TradeHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // 오라클: ID
+    private Long id;
 
-    private String coin; // 오라클: COIN
+    private String coin;
     
-    // tradeType 필드에 명시적 매핑
-    @Column(name = "TRADETYPE") // 데이터베이스 컬럼 이름이 'TRADETYPE'이라고 가정
-    private String tradeType; // buy/sell
+    @Column(name = "TRADETYPE")
+    private String tradeType; 
     
-    private double price; // 오라클: PRICE
+    private double price;
     
-    // tradedAt 필드에 명시적 매핑
-    @Column(name = "TRADEDAT") // 데이터베이스 컬럼 이름이 'TRADEDAT'이라고 가정
+    @Column(name = "TRADEDAT")
     private LocalDateTime tradedAt;
 }

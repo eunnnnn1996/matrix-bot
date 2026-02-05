@@ -7,22 +7,22 @@ spring:
 
   datasource:
     url: ${DB_URL}
-    
     username: ${DB_USER}
     password: ${DB_PASS}
-    
     driver-class-name: oracle.jdbc.OracleDriver
-    
+
   jackson:
     serialization:
       INDENT_OUTPUT: true
 
-# application.yml
 bithumb:
   api:
-    url: ${BITHUMB_API_URL}
+    url: ${BITHUMB_API_URL:https://api.bithumb.com}
     key: ${BITHUMB_API_KEY}
     secret: ${BITHUMB_API_SECRET}
 
-
-    
+# 안전장치
+trade:
+  mode: ${TRADE_MODE:live}             # paper | live
+  live:
+    confirm: ${TRADE_LIVE_CONFIRM:true} # live 모드에서 true 아니면 주문 막음

@@ -18,7 +18,7 @@ public class CandleService {
     // 24h 캔들: /public/candlestick/BTC_KRW/24h
     public List<List<Object>> getCandles24h(String coin) {
         /* String url = BASE_URL + "/public/candlestick/" + coin + "_KRW/24h"; */
-        String url = BASE_URL + "/public/candlestick/" + coin + "_KRW/5m";
+        String url = BASE_URL + "/public/candlestick/" + coin + "_KRW/1m";
         Map<String, Object> res = restTemplate.getForObject(url, Map.class);
         if (res == null) return List.of();
 
