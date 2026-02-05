@@ -70,23 +70,36 @@ public class BithumbPrivateClient {
     }
 
     // ===== 주문(지정가) =====
-    // market: "KRW-BTC" 형태로 들어가는게 일반적. (네 코드 흐름은 KRW-COIN 사용중)
     public Map<String, Object> placeLimitOrder(String market, String side, String volume, String price) {
-        // ✅ body 값은 무조건 String으로 고정 (query_hash와 100% 동일 문자열 보장)
+        // body 값은 String 고정(해시/문자열 동일성 확보)
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("market", market);
-        body.put("side", side);         // bid(매수) / ask(매도)
-        body.put("volume", volume);     // "0.00001" (과학표기 금지)
-        body.put("price", price);       // "102119000"
+        body.put("side", side);         // bid / ask
+        body.put("volume", volume);     // "0.00007"
+        body.put("price", price);       // "101853000"
         body.put("ord_type", "limit");
 
-        return postPrivate("/v1/orders", body);
+        return postPrivateJson("/v1/orders", body);
     }
 
-    private Map<String, Object> postPrivate(String path, Map<String, Object> body) {
+    // ===== 미체결 주문 조회 (재시작 동기화용) =====
+    public List<Map<String, Object>> getOpenOrders(String market) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("market", market);
+        params.put("state", "wait");
+        params.put("page", "1");
+        params.put("limit", "50");
+        params.put("order_by", "desc");
+        return getPrivateList("/v1/orders", params);
+    }
+
+    // =========================
+    // Private POST (JSON body 있음)
+    // =========================
+    private Map<String, Object> postPrivateJson(String path, Map<String, Object> body) {
         String url = baseUrl + path;
 
-        String query = toSortedQueryString(body);
+        String query = toQueryString(body);       // urlencode된 query
         String queryHash = sha512Hex(query);
 
         String jwtToken = JWT.create()
@@ -109,7 +122,6 @@ public class BithumbPrivateClient {
             //noinspection unchecked
             return (Map<String, Object>) response.getBody();
         } catch (HttpStatusCodeException e) {
-            // ✅ 여기서 진짜 원인 코드가 나온다
             String errBody = e.getResponseBodyAsString();
             System.out.println("[HTTP_ERR] status=" + e.getStatusCode() + " body=" + errBody);
             return Map.of("success", false, "message", "status=" + e.getStatusCode() + " body=" + errBody);
@@ -118,18 +130,54 @@ public class BithumbPrivateClient {
         }
     }
 
-    // ✅ 핵심: 키 정렬 + URL 인코딩 + "key=value&..." 문자열 생성
-    private String toSortedQueryString(Map<String, Object> params) {
-        List<String> keys = new ArrayList<>(params.keySet());
-        Collections.sort(keys);
+    // =========================
+    // Private GET (List 응답)
+    // =========================
+    private List<Map<String, Object>> getPrivateList(String path, Map<String, Object> queryParams) {
+        String url = baseUrl + path;
 
+        String query = toQueryString(queryParams);
+        String queryHash = sha512Hex(query);
+
+        String jwtToken = JWT.create()
+                .withClaim("access_key", accessKey)
+                .withClaim("nonce", UUID.randomUUID().toString())
+                .withClaim("timestamp", System.currentTimeMillis())
+                .withClaim("query_hash", queryHash)
+                .withClaim("query_hash_alg", "SHA512")
+                .sign(Algorithm.HMAC256(secretKey));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtToken);
+
+        String fullUrl = url + "?" + query;
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<List> response = restTemplate.exchange(fullUrl, HttpMethod.GET, entity, List.class);
+            if (response.getBody() == null) return List.of();
+            //noinspection unchecked
+            return (List<Map<String, Object>>) response.getBody();
+        } catch (HttpStatusCodeException e) {
+            System.out.println("[HTTP_ERR] status=" + e.getStatusCode() + " body=" + e.getResponseBodyAsString());
+            return List.of();
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    // =========================
+    // Query string 생성 (정렬 X, insertion order 그대로)
+    // =========================
+    private String toQueryString(Map<String, Object> params) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < keys.size(); i++) {
-            String k = keys.get(i);
-            Object v = params.get(k);
+        int i = 0;
 
-            if (i > 0) sb.append("&");
-            sb.append(urlEncode(k)).append("=").append(urlEncode(String.valueOf(v)));
+        for (Map.Entry<String, Object> e : params.entrySet()) {
+            if (i++ > 0) sb.append("&");
+            sb.append(urlEncode(String.valueOf(e.getKey())))
+              .append("=")
+              .append(urlEncode(String.valueOf(e.getValue())));
         }
         return sb.toString();
     }

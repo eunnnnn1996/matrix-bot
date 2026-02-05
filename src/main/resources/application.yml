@@ -23,6 +23,6 @@ bithumb:
 
 # 안전장치
 trade:
-  mode: ${TRADE_MODE:live}             # paper | live
+  mode: ${TRADE_MODE:paper}             # paper | live
   live:
-    confirm: ${TRADE_LIVE_CONFIRM:true} # live 모드에서 true 아니면 주문 막음
+    confirm: ${TRADE_LIVE_CONFIRM:false} # live 모드에서 true 아니면 주문 막음

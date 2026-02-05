@@ -33,60 +33,54 @@ public class RealTradeExecutor implements TradeExecutor {
     }
 
     @Override
-    public void buy(String coin, double price, double quantity) {
+    public Map<String, Object> buy(String coin, double price, double quantity) {
         String market = "KRW-" + coin;
 
         if (!"live".equalsIgnoreCase(tradeMode)) {
             System.out.println("[PAPER BUY] " + coin + " price=" + price + " qty=" + quantity);
-            return;
+            return Map.of("success", true, "mode", "paper");
         }
         if (!liveConfirm) {
             System.out.println("[BLOCKED] live mode지만 TRADE_LIVE_CONFIRM=false 라서 주문 막음");
-            return;
+            return Map.of("success", false, "message", "blocked: liveConfirm=false");
         }
 
         long krwPrice = Math.round(price);
 
-        // ✅ 과학표기 방지 (1.0E-5 → 0.00001)
         String volumeStr = BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString();
         String priceStr  = BigDecimal.valueOf(krwPrice).toPlainString();
 
         Map<String, Object> res = bithumbPrivateClient.placeLimitOrder(
-                market,
-                "bid",
-                volumeStr,
-                priceStr
+                market, "bid", volumeStr, priceStr
         );
 
         System.out.println("[LIVE BUY] " + coin + " price=" + krwPrice + " qty=" + volumeStr + " res=" + res);
+        return res;
     }
 
     @Override
-    public void sell(String coin, double price, double quantity) {
+    public Map<String, Object> sell(String coin, double price, double quantity) {
         String market = "KRW-" + coin;
 
         if (!"live".equalsIgnoreCase(tradeMode)) {
             System.out.println("[PAPER SELL] " + coin + " price=" + price + " qty=" + quantity);
-            return;
+            return Map.of("success", true, "mode", "paper");
         }
         if (!liveConfirm) {
             System.out.println("[BLOCKED] live mode지만 TRADE_LIVE_CONFIRM=false 라서 주문 막음");
-            return;
+            return Map.of("success", false, "message", "blocked: liveConfirm=false");
         }
 
         long krwPrice = Math.round(price);
 
-        // ✅ 과학표기 방지
         String volumeStr = BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString();
         String priceStr  = BigDecimal.valueOf(krwPrice).toPlainString();
 
         Map<String, Object> res = bithumbPrivateClient.placeLimitOrder(
-                market,
-                "ask",
-                volumeStr,
-                priceStr
+                market, "ask", volumeStr, priceStr
         );
 
         System.out.println("[LIVE SELL] " + coin + " price=" + krwPrice + " qty=" + volumeStr + " res=" + res);
+        return res;
     }
 }

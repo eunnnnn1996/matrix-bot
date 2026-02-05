@@ -21,7 +21,7 @@ public class VolatilityBreakoutStrategy implements TradeStrategy {
     private final double k = 0.002;             // 매수 목표가 튜닝
     private final double takeProfit = 0.002;    // 추가: 익절 0.2%
     private final double stopLoss = 0.002;      // 추가: 손절 0.2%
-    private final double quantity = 0.00001;
+    private final double quantity = 0.00007;
 
     @Override
     public TradeSignal decide(String coin, double currentPrice) {
