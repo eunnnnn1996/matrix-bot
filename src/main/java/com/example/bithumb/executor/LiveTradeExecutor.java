@@ -4,6 +4,7 @@ import com.example.bithumb.client.BithumbPrivateClient;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -12,19 +13,17 @@ import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
-public class RealTradeExecutor implements TradeExecutor {
+@ConditionalOnProperty(name = "trade.mode", havingValue = "live")
+public class LiveTradeExecutor implements TradeExecutor {
 
     private final BithumbPrivateClient bithumbPrivateClient;
-
-    @Value("${trade.mode:paper}")
-    private String tradeMode; // paper | live
 
     @Value("${trade.live.confirm:false}")
     private boolean liveConfirm;
 
     @PostConstruct
     public void debugMode() {
-        System.out.println("[DEBUG] tradeMode=" + tradeMode + ", liveConfirm=" + liveConfirm);
+        System.out.println("[DEBUG] tradeMode=live, liveConfirm=" + liveConfirm);
     }
 
     @Override
@@ -36,10 +35,6 @@ public class RealTradeExecutor implements TradeExecutor {
     public Map<String, Object> buy(String coin, double price, double quantity) {
         String market = "KRW-" + coin;
 
-        if (!"live".equalsIgnoreCase(tradeMode)) {
-            System.out.println("[PAPER BUY] " + coin + " price=" + price + " qty=" + quantity);
-            return Map.of("success", true, "mode", "paper");
-        }
         if (!liveConfirm) {
             System.out.println("[BLOCKED] live mode지만 TRADE_LIVE_CONFIRM=false 라서 주문 막음");
             return Map.of("success", false, "message", "blocked: liveConfirm=false");
@@ -62,10 +57,6 @@ public class RealTradeExecutor implements TradeExecutor {
     public Map<String, Object> sell(String coin, double price, double quantity) {
         String market = "KRW-" + coin;
 
-        if (!"live".equalsIgnoreCase(tradeMode)) {
-            System.out.println("[PAPER SELL] " + coin + " price=" + price + " qty=" + quantity);
-            return Map.of("success", true, "mode", "paper");
-        }
         if (!liveConfirm) {
             System.out.println("[BLOCKED] live mode지만 TRADE_LIVE_CONFIRM=false 라서 주문 막음");
             return Map.of("success", false, "message", "blocked: liveConfirm=false");

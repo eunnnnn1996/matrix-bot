@@ -93,6 +93,13 @@ public class BithumbPrivateClient {
         return getPrivateList("/v1/orders", params);
     }
 
+    // ===== 주문 단건 조회 (uuid로 상태 확인) =====
+    public Map<String, Object> getOrder(String uuid) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("uuid", uuid);
+        return getPrivateMap("/v1/order", params);
+    }
+
     // =========================
     // Private POST (JSON body 있음)
     // =========================
@@ -167,6 +174,42 @@ public class BithumbPrivateClient {
     }
 
     // =========================
+    // Private GET (Map 응답)
+    // =========================
+    private Map<String, Object> getPrivateMap(String path, Map<String, Object> queryParams) {
+        String url = baseUrl + path;
+
+        String query = toQueryString(queryParams);
+        String queryHash = sha512Hex(query);
+
+        String jwtToken = JWT.create()
+                .withClaim("access_key", accessKey)
+                .withClaim("nonce", UUID.randomUUID().toString())
+                .withClaim("timestamp", System.currentTimeMillis())
+                .withClaim("query_hash", queryHash)
+                .withClaim("query_hash_alg", "SHA512")
+                .sign(Algorithm.HMAC256(secretKey));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtToken);
+
+        String fullUrl = url + "?" + query;
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(fullUrl, HttpMethod.GET, entity, Map.class);
+            if (response.getBody() == null) return Map.of();
+            //noinspection unchecked
+            return (Map<String, Object>) response.getBody();
+        } catch (HttpStatusCodeException e) {
+            System.out.println("[HTTP_ERR] status=" + e.getStatusCode() + " body=" + e.getResponseBodyAsString());
+            return Map.of();
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    // =========================
     // Query string 생성 (정렬 X, insertion order 그대로)
     // =========================
     private String toQueryString(Map<String, Object> params) {
@@ -197,4 +240,12 @@ public class BithumbPrivateClient {
             throw new RuntimeException(e);
         }
     }
+
+    // ===== 주문 취소 (uuid) =====
+    public Map<String, Object> cancelOrder(String uuid) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("uuid", uuid);
+        return postPrivateJson("/v1/order", body); // 빗썸 취소는 DELETE인 경우도 있어 계정/API 스펙에 따라 조정 필요
+    }
+
 }
