@@ -4,12 +4,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
 import com.example.bithumb.domain.TradeLog;
-import com.example.bithumb.executor.TradeExecutor;
 import com.example.bithumb.repository.TradeLogRepository;
 import com.example.dto.TodayProfitDto;
 
@@ -30,14 +28,24 @@ public class DashboardService {
         List<TradeLog> logs =
                 tradeLogRepository.findByCoinAndCreatedAtBetween(coin, start, end);
 
-        double profit = 0;
+        double realizedPnlSum = 0;
 
         for (TradeLog t : logs) {
-            if ("SELL".equalsIgnoreCase(t.getSide())) {
-                profit += t.getPrice() * t.getQty();
+            if (!"SELL".equalsIgnoreCase(t.getSide())) continue;
+
+            // 정석: SELL 로그에 realizedPnl을 저장해두고 그걸 합산한다.
+            Double pnl = t.getRealizedPnl();
+            if (pnl != null) {
+                realizedPnlSum += pnl;
+            } else {
+                // 과거 데이터(컬럼 추가 전) 호환: avgBuyAtTrade가 있으면 그걸로 계산
+                Double avg = t.getAvgBuyAtTrade();
+                if (avg != null && avg > 0) {
+                    realizedPnlSum += (t.getPrice() - avg) * t.getQty();
+                }
             }
         }
 
-        return TodayProfitDto.of(coin, profit, logs.size());
+        return TodayProfitDto.of(coin, realizedPnlSum, logs.size());
     }
 }

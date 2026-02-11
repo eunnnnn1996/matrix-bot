@@ -36,8 +36,7 @@ public class TradeService {
     @Value("${trade.mode:paper}")
     private String tradeMode;
 
-    private volatile
-    boolean botRunning = false;
+    private volatile boolean botRunning = false;
 
     private static final String MARKET = "KRW-BTC";
     private static final String COIN = "BTC";
@@ -46,9 +45,7 @@ public class TradeService {
     public void startBot() {
         botRunning = true;
         System.out.println("=== BOT STARTED ===");
-        // 전략 메모리 초기화(기존 유지)
         tradeStrategy.reset();
-        // ✅ 재시작 안전 동기화(핵심)
         syncStateOnStart();
     }
 
@@ -64,7 +61,6 @@ public class TradeService {
     // ===== 재시작 동기화 =====
     private void syncStateOnStart() {
         try {
-            // 1) 미체결 주문 확인 (live 전용)
             if ("live".equalsIgnoreCase(tradeMode)) {
                 List<Map<String, Object>> openOrders = bithumbPrivateClient.getOpenOrders(MARKET);
                 if (openOrders != null && !openOrders.isEmpty()) {
@@ -83,7 +79,6 @@ public class TradeService {
                 botState.setOpenOrderSide(null);
             }
 
-            // 2) 보유 수량 확인
             var balances = tradeExecutor.getBalance();
             double btc = 0.0;
 
@@ -116,7 +111,6 @@ public class TradeService {
         String uuid = botState.getOpenOrderUuid();
         if (uuid == null || uuid.isBlank()) return;
 
-        // ✅ 60초 초과면 자동취소 시도
         Instant createdAt = botState.getOpenOrderCreatedAt();
         if (createdAt != null) {
             long elapsed = Duration.between(createdAt, Instant.now()).getSeconds();
@@ -126,23 +120,20 @@ public class TradeService {
                 Map<String, Object> cancelRes = bithumbPrivateClient.cancelOrder(uuid);
                 System.out.println("[ORDER_CANCEL_RES] uuid=" + uuid + " res=" + cancelRes);
 
-                // 취소 시도 후 오픈오더 플래그는 내려줌(재조회로 다시 잡힐 수 있음)
                 botState.setHasOpenOrder(false);
                 botState.setOpenOrderUuid(null);
                 botState.setOpenOrderSide(null);
                 botState.setOpenOrderCreatedAt(null);
 
-                // 잔고 다시 동기화
                 syncPositionOnly();
                 return;
             }
         }
 
-        // 아직 타임아웃 전이면 상태 조회
         Map<String, Object> order = bithumbPrivateClient.getOrder(uuid);
         if (order == null || order.isEmpty()) return;
 
-        String state = String.valueOf(order.getOrDefault("state", "")).toLowerCase(); // wait / done / cancel
+        String state = String.valueOf(order.getOrDefault("state", "")).toLowerCase();
         String remaining = String.valueOf(order.getOrDefault("remaining_volume", ""));
 
         boolean finishedByState = state.equals("done") || state.equals("cancel");
@@ -168,8 +159,7 @@ public class TradeService {
         }
     }
 
-
-    // ===== 포지션(잔고)만 동기화 (paper/live 공통) =====
+    // ===== 포지션(잔고)만 동기화 =====
     private void syncPositionOnly() {
         try {
             var balances = tradeExecutor.getBalance();
@@ -190,29 +180,22 @@ public class TradeService {
 
             botState.setHasPosition(btc > 0.0);
             botState.setPositionVolume(java.math.BigDecimal.valueOf(btc));
-            botState.setPositionAvgBuyPrice(avgBuy); // ✅ 이 줄이 핵심
+            botState.setPositionAvgBuyPrice(avgBuy);
         } catch (Exception e) {
             System.out.println("[POS_SYNC_FAIL] " + e.getMessage());
         }
     }
 
-
-    // ===== 매수 가능 여부(중복매수 방지) =====
     private boolean canBuyNow() {
-        // 미체결 주문 있으면 신규 주문 금지
         if (botState.isHasOpenOrder()) return false;
-
-        // 이미 BTC 보유 중이면 매수 금지(분할매수 하고 싶으면 여기 정책만 바꾸면 됨)
         if (botState.isHasPosition()) return false;
 
-        // 쿨다운(예: 60초)
         Instant last = botState.getLastBuyAt();
         if (last != null && Duration.between(last, Instant.now()).getSeconds() < 60) return false;
 
         return true;
     }
 
-    // ===== 매도 가능 여부(중복매도 방지) =====
     private boolean canSellNow() {
         if (botState.isHasOpenOrder()) return false;
         if (!botState.isHasPosition()) return false;
@@ -228,10 +211,7 @@ public class TradeService {
         if (!botRunning) return;
         System.out.println("BOT tick");
 
-        // ✅ live면 uuid 주문 상태 확인해서 완료되면 hasOpenOrder 내려줌
         refreshOpenOrderIfFinished();
-
-        // ✅ 포지션은 매 tick마다 동기화(paper 무한매수/상태정합)
         syncPositionOnly();
 
         double currentPrice = bithumbPrivateClient.getCurrentPrice(coin);
@@ -248,16 +228,14 @@ public class TradeService {
 
             Map<String, Object> res = tradeExecutor.buy(coin, currentPrice, signal.quantity());
 
-            // ✅ 실주문 접수(uuid)면 오픈오더 플래그 세팅
             Object uuid = res.get("uuid");
             if (uuid != null) {
                 botState.setHasOpenOrder(true);
                 botState.setOpenOrderUuid(String.valueOf(uuid));
                 botState.setOpenOrderSide("bid");
-                botState.setOpenOrderCreatedAt(Instant.now()); // ✅ 추가
+                botState.setOpenOrderCreatedAt(Instant.now());
                 botState.setLastBuyAt(Instant.now());
             }
-
 
             tradeLogRepository.save(
                     new TradeLog(
@@ -275,6 +253,13 @@ public class TradeService {
                 return;
             }
 
+            // ✅ SELL 시점의 원가(평단) + 실현손익 계산
+            Double avgBuyAtSell = botState.getPositionAvgBuyPrice();
+            if (avgBuyAtSell == null || avgBuyAtSell <= 0) {
+                System.out.println("[WARN] avgBuyAtSell is null/0. pnl will be 0. avgBuyAtSell=" + avgBuyAtSell);
+            }
+            double realizedPnl = (avgBuyAtSell == null ? 0.0 : (currentPrice - avgBuyAtSell) * signal.quantity());
+
             Map<String, Object> res = tradeExecutor.sell(coin, currentPrice, signal.quantity());
 
             Object uuid = res.get("uuid");
@@ -282,24 +267,21 @@ public class TradeService {
                 botState.setHasOpenOrder(true);
                 botState.setOpenOrderUuid(String.valueOf(uuid));
                 botState.setOpenOrderSide("ask");
-                botState.setOpenOrderCreatedAt(Instant.now()); // ✅ 추가
+                botState.setOpenOrderCreatedAt(Instant.now());
                 botState.setLastSellAt(Instant.now());
             }
 
-
-            tradeLogRepository.save(
-                    new TradeLog(
-                            coin, "SELL", currentPrice, signal.quantity(),
-                            tradeStrategy.getClass().getSimpleName(),
-                            signal.reason()
-                    )
+            TradeLog sellLog = new TradeLog(
+                    coin, "SELL", currentPrice, signal.quantity(),
+                    tradeStrategy.getClass().getSimpleName(),
+                    signal.reason()
             );
+            sellLog.setAvgBuyAtTrade(avgBuyAtSell);
+            sellLog.setRealizedPnl(realizedPnl);
+            tradeLogRepository.save(sellLog);
+
             saveBalanceSnapshot(coin);
         }
-
-        // ✅ 주문 상태는 tick마다 uuid로 확인(최소 기능)
-        // "미체결 사라짐 -> hasOpenOrder=false"는 refreshOpenOrderIfFinished()가 담당
-        // 보유량 변화는 syncPositionOnly()가 담당
     }
 
     public List<Map<String, Object>> getBalance() {

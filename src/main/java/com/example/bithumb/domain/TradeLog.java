@@ -1,7 +1,8 @@
 package com.example.bithumb.domain;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -30,6 +31,19 @@ public class TradeLog {
     private String strategy; // VolatilityBreakout
     private String reason;   // breakout / take_profit / stop_loss
 
+    /**
+     * SELL 체결 시점의 평단(원가). BUY일 때는 null이어도 됨.
+     * 오늘 실현손익(todayRealizedPnl)을 정확하게 계산하려고 저장.
+     */
+    @Column(name = "AVG_BUY_AT_TRADE")
+    private Double avgBuyAtTrade;
+
+    /**
+     * SELL 체결로 확정된 손익(원화). BUY일 때는 0 또는 null.
+     */
+    @Column(name = "REALIZED_PNL")
+    private Double realizedPnl;
+
     @Column(name = "CREATED_AT")
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -41,5 +55,14 @@ public class TradeLog {
         this.qty = qty;
         this.strategy = strategy;
         this.reason = reason;
+    }
+
+    // SELL 저장할 때만 쓰는 편의 메서드
+    public void setAvgBuyAtTrade(Double avgBuyAtTrade) {
+        this.avgBuyAtTrade = avgBuyAtTrade;
+    }
+
+    public void setRealizedPnl(Double realizedPnl) {
+        this.realizedPnl = realizedPnl;
     }
 }
