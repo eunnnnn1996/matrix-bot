@@ -46,10 +46,8 @@ public class TradeService {
     public void startBot() {
         botRunning = true;
         System.out.println("=== BOT STARTED ===");
-
         // 전략 메모리 초기화(기존 유지)
         tradeStrategy.reset();
-
         // ✅ 재시작 안전 동기화(핵심)
         syncStateOnStart();
     }

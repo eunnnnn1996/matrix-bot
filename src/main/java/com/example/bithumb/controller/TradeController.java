@@ -1,7 +1,9 @@
 package com.example.bithumb.controller;
 
 import com.example.bithumb.repository.TradeHistoryRepository;
+import com.example.bithumb.service.DashboardService;
 import com.example.bithumb.service.TradeService;
+import com.example.dto.TodayProfitDto;
 
 import lombok.RequiredArgsConstructor;
 
@@ -12,16 +14,24 @@ import org.springframework.web.bind.annotation.*;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/api/trade")
+@RequestMapping("/api/trade") 
 @RequiredArgsConstructor
 public class TradeController {
 
     private final TradeService tradeService;
+    private final DashboardService dashboardService;
     private final TradeHistoryRepository tradeHistoryRepository;
 
+    // 잔액조회
     @GetMapping("/balance")
     public List<Map<String, Object>> getBalance() {
         return tradeService.getBalance();
+    }
+
+    // 오늘 수익
+    @GetMapping("/today-profit")
+    public TodayProfitDto todayProfit(@RequestParam(defaultValue = "BTC") String coin) {
+        return dashboardService.getTodayProfit(coin);
     }
 
     @GetMapping("/history")

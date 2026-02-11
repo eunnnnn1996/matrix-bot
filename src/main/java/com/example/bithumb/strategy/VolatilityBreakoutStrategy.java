@@ -18,8 +18,8 @@ public class VolatilityBreakoutStrategy implements TradeStrategy {
     private double targetPrice = 0;
 
     private final double k = 0.002;             // 매수 목표가 튜닝
-    private final double takeProfit = 0.002;    // 익절 0.2%
-    private final double stopLoss = 0.002;      // 손절 0.2%
+    private final double takeProfit = 0.0008;    // 익절 0.2%
+    private final double stopLoss = 0.0008;      // 손절 0.2%
     private final double quantity = 0.007;
 
     @Override
