@@ -14,5 +14,7 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
             LocalDateTime start,
             LocalDateTime end
     );
+
+    List<TradeLog> findByCoin(String coin);
 }
 

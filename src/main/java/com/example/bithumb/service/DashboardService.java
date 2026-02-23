@@ -4,12 +4,16 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
+import com.example.bithumb.client.BithumbPrivateClient;
 import com.example.bithumb.domain.TradeLog;
+import com.example.bithumb.dto.TodayProfitDto;
+import com.example.bithumb.dto.TotalAssetsDto;
+import com.example.bithumb.dto.TotalProfitDto;
 import com.example.bithumb.repository.TradeLogRepository;
-import com.example.dto.TodayProfitDto;
 
 import lombok.RequiredArgsConstructor;
 
@@ -18,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 public class DashboardService {
 
     private final TradeLogRepository tradeLogRepository;
+    private final TradeService tradeService;
+    private final BithumbPrivateClient bithumbPrivateClient;
 
     public TodayProfitDto getTodayProfit(String coin) {
 
@@ -47,5 +53,81 @@ public class DashboardService {
         }
 
         return TodayProfitDto.of(coin, realizedPnlSum, logs.size());
+    }
+     // ✅ 추가: 총자산 (BTC만)
+    public TotalAssetsDto getTotalAssets() {
+
+        List<Map<String, Object>> balances = tradeService.getBalance();
+
+        long krwBalance = 0L;
+        double btcBalance = 0.0;
+
+        for (Map<String, Object> row : balances) {
+            String currency = String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
+
+            if ("KRW".equals(currency)) {
+                krwBalance = parseLongSafe(row.get("balance"));
+            } else if ("BTC".equals(currency)) {
+                btcBalance = parseDoubleSafe(row.get("balance"));
+            }
+        }
+
+        double btcPrice = bithumbPrivateClient.getCurrentPrice("BTC"); // 현재가 (원)
+        long btcValueKrw = Math.round(btcBalance * btcPrice);
+        long totalAssetsKrw = krwBalance + btcValueKrw;
+
+        return TotalAssetsDto.of(
+                "BTC",
+                krwBalance,
+                btcBalance,
+                btcPrice,
+                btcValueKrw,
+                totalAssetsKrw
+        );
+    }
+    
+    public TotalProfitDto getTotalProfit(String coin) {
+
+        List<TradeLog> logs = tradeLogRepository.findByCoin(coin);
+
+        double totalRealizedPnl = 0;
+        int sellCount = 0;
+
+        for (TradeLog t : logs) {
+            if (!"SELL".equalsIgnoreCase(t.getSide())) continue;
+            sellCount++;
+
+            Double pnl = t.getRealizedPnl();
+            if (pnl != null) {
+                totalRealizedPnl += pnl;
+            } else {
+                // 과거 데이터(컬럼 추가 전) 호환
+                Double avg = t.getAvgBuyAtTrade();
+                if (avg != null && avg > 0) {
+                    totalRealizedPnl += (t.getPrice() - avg) * t.getQty();
+                }
+            }
+        }
+
+        return TotalProfitDto.of(coin, totalRealizedPnl, sellCount);
+    }
+    
+    private long parseLongSafe(Object v) {
+        if (v == null) return 0L;
+        try {
+            double d = Double.parseDouble(v.toString());
+            return (long) Math.floor(d);
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private double parseDoubleSafe(Object v) {
+        if (v == null) return 0.0;
+        try {
+            return Double.parseDouble(v.toString());
+        } catch (Exception e) {
+            return 0.0;
+        }
     }
 }
