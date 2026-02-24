@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.bithumb.domain.TradeLog;
 import com.example.bithumb.dto.TodayProfitDto;
 import com.example.bithumb.dto.TotalAssetsDto;
 import com.example.bithumb.dto.TotalProfitDto;
@@ -73,5 +74,17 @@ public class TradeController {
     @GetMapping("/bot/status")
     public Map<String, Object> status() {
         return Map.of("running", tradeService.isRunning());
+    }
+
+    @GetMapping("/start-id") 
+    public Long getStartId(@RequestParam(defaultValue = "BTC") String coin) {
+
+        return dashboardService.getStartId(coin);
+    }
+
+    @GetMapping("/liveLogs")
+    public List<TradeLog> getLogs(@RequestParam String coin, @RequestParam Long afterId) {
+
+        return dashboardService.getNewLogs(coin, afterId);
     }
 }

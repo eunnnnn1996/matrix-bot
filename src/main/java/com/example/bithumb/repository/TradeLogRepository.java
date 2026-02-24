@@ -2,6 +2,7 @@ package com.example.bithumb.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,5 +17,10 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
     );
 
     List<TradeLog> findByCoin(String coin);
+    // 최신 로그
+    Optional<TradeLog> findTopByCoinOrderByIdDesc(String coin);
+
+    // 시작 이후 마지막 ID 값
+    List<TradeLog> findTop50ByCoinAndIdGreaterThanOrderByIdAsc(String coin, Long id);
 }
 

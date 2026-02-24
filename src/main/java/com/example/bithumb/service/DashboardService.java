@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -129,5 +130,19 @@ public class DashboardService {
         } catch (Exception e) {
             return 0.0;
         }
+    }
+
+    // 시작 시점 ID 구하기
+    public Long getStartId(String coin) {
+
+        Optional<TradeLog> last = tradeLogRepository.findTopByCoinOrderByIdDesc(coin);
+
+        return last.map(TradeLog::getId)
+                .orElse(0L);
+    }
+
+    public List<TradeLog> getNewLogs(String coin, Long afterId) {
+
+        return tradeLogRepository.findTop50ByCoinAndIdGreaterThanOrderByIdAsc(coin, afterId);
     }
 }
