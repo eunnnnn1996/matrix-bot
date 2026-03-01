@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 public class TradeService {
 
     private final BithumbPrivateClient bithumbPrivateClient;
-    private final TradeHistoryRepository tradeHistoryRepository; // 현재 코드에 있어 유지
+    private final TradeHistoryRepository tradeHistoryRepository;
     private final TradeExecutor tradeExecutor;
     private final TradeStrategy tradeStrategy;
     private final TradeLogRepository tradeLogRepository;
@@ -33,14 +33,26 @@ public class TradeService {
 
     private final BotState botState;
 
+    // ⭐ settings 서비스 추가 (캐시 사용)
+    private final BotSettingsService botSettingsService;
+
     @Value("${trade.mode:paper}")
     private String tradeMode;
 
     private volatile boolean botRunning = false;
 
-    private static final String MARKET = "KRW-BTC";
-    private static final String COIN = "BTC";
     private static final long OPEN_ORDER_TIMEOUT_SEC = 60;
+
+    // ===============================
+    // settings helper
+    // ===============================
+    private String getCoin() {
+        return botSettingsService.botSelect().getCoin();
+    }
+
+    private String getMarket() {
+        return "KRW-" + getCoin();
+    }
 
     public void startBot() {
         botRunning = true;
@@ -60,14 +72,22 @@ public class TradeService {
 
     // ===== 재시작 동기화 =====
     private void syncStateOnStart() {
+
+        String coin = getCoin();
+        String market = getMarket();
+
         try {
             if ("live".equalsIgnoreCase(tradeMode)) {
-                List<Map<String, Object>> openOrders = bithumbPrivateClient.getOpenOrders(MARKET);
+
+                List<Map<String, Object>> openOrders =
+                        bithumbPrivateClient.getOpenOrders(market);
+
                 if (openOrders != null && !openOrders.isEmpty()) {
                     Map<String, Object> o = openOrders.get(0);
                     botState.setHasOpenOrder(true);
                     botState.setOpenOrderUuid(String.valueOf(o.get("uuid")));
-                    botState.setOpenOrderSide(o.get("side") == null ? null : String.valueOf(o.get("side")));
+                    botState.setOpenOrderSide(
+                            o.get("side") == null ? null : String.valueOf(o.get("side")));
                 } else {
                     botState.setHasOpenOrder(false);
                     botState.setOpenOrderUuid(null);
@@ -80,45 +100,46 @@ public class TradeService {
             }
 
             var balances = tradeExecutor.getBalance();
-            double btc = 0.0;
+            double coinBal = 0.0;
 
             for (var row : balances) {
-                String currency = String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
-                if ("BTC".equals(currency)) {
-                    btc = parseDoubleSafe(row.get("balance"));
+                String currency =
+                        String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
+
+                if (coin.equalsIgnoreCase(currency)) {
+                    coinBal = parseDoubleSafe(row.get("balance"));
                     break;
                 }
             }
 
-            botState.setHasPosition(btc > 0.0);
-            botState.setPositionVolume(java.math.BigDecimal.valueOf(btc));
+            botState.setHasPosition(coinBal > 0.0);
+            botState.setPositionVolume(java.math.BigDecimal.valueOf(coinBal));
 
-            System.out.println("[SYNC] hasOpenOrder=" + botState.isHasOpenOrder()
-                    + " uuid=" + botState.getOpenOrderUuid()
-                    + " side=" + botState.getOpenOrderSide()
-                    + " hasPosition=" + botState.isHasPosition()
-                    + " btc=" + botState.getPositionVolume());
         } catch (Exception e) {
             System.out.println("[SYNC_FAIL] " + e.getMessage());
         }
     }
 
-    // ===== uuid로 주문 완료 감지 (live 전용) =====
+    // ===== uuid 주문 완료 감지 =====
     private void refreshOpenOrderIfFinished() {
-        if (!"live".equalsIgnoreCase(tradeMode)) return;
 
+        if (!"live".equalsIgnoreCase(tradeMode)) return;
         if (!botState.isHasOpenOrder()) return;
+
         String uuid = botState.getOpenOrderUuid();
         if (uuid == null || uuid.isBlank()) return;
 
         Instant createdAt = botState.getOpenOrderCreatedAt();
-        if (createdAt != null) {
-            long elapsed = Duration.between(createdAt, Instant.now()).getSeconds();
-            if (elapsed >= OPEN_ORDER_TIMEOUT_SEC) {
-                System.out.println("[ORDER_TIMEOUT] uuid=" + uuid + " elapsedSec=" + elapsed + " -> cancel");
 
-                Map<String, Object> cancelRes = bithumbPrivateClient.cancelOrder(uuid);
-                System.out.println("[ORDER_CANCEL_RES] uuid=" + uuid + " res=" + cancelRes);
+        if (createdAt != null) {
+            long elapsed =
+                    Duration.between(createdAt, Instant.now()).getSeconds();
+
+            if (elapsed >= OPEN_ORDER_TIMEOUT_SEC) {
+
+                System.out.println("[ORDER_TIMEOUT] uuid=" + uuid);
+
+                bithumbPrivateClient.cancelOrder(uuid);
 
                 botState.setHasOpenOrder(false);
                 botState.setOpenOrderUuid(null);
@@ -130,46 +151,56 @@ public class TradeService {
             }
         }
 
-        Map<String, Object> order = bithumbPrivateClient.getOrder(uuid);
+        Map<String, Object> order =
+                bithumbPrivateClient.getOrder(uuid);
+
         if (order == null || order.isEmpty()) return;
 
-        String state = String.valueOf(order.getOrDefault("state", "")).toLowerCase();
-        String remaining = String.valueOf(order.getOrDefault("remaining_volume", ""));
+        String state =
+                String.valueOf(order.getOrDefault("state", "")).toLowerCase();
 
-        boolean finishedByState = state.equals("done") || state.equals("cancel");
-        boolean finishedByRemaining = false;
+        String remaining =
+                String.valueOf(order.getOrDefault("remaining_volume", ""));
+
+        boolean finished =
+                state.equals("done") ||
+                state.equals("cancel");
 
         try {
             if (remaining != null && !remaining.isBlank()) {
-                finishedByRemaining = Double.parseDouble(remaining) == 0.0;
+                finished |= Double.parseDouble(remaining) == 0.0;
             }
         } catch (Exception ignored) {}
 
-        if (finishedByState || finishedByRemaining) {
-            System.out.println("[ORDER_FINISHED] uuid=" + uuid + " state=" + state + " remaining=" + remaining);
-
+        if (finished) {
             botState.setHasOpenOrder(false);
             botState.setOpenOrderUuid(null);
             botState.setOpenOrderSide(null);
             botState.setOpenOrderCreatedAt(null);
 
             syncPositionOnly();
-        } else {
-            System.out.println("[ORDER_WAIT] uuid=" + uuid + " state=" + state + " remaining=" + remaining);
         }
     }
 
-    // ===== 포지션(잔고)만 동기화 =====
+    // ===== 포지션 동기화 =====
     private void syncPositionOnly() {
+
+        String coin = getCoin();
+
         try {
             var balances = tradeExecutor.getBalance();
-            double btc = 0.0;
+
+            double coinBal = 0.0;
             Double avgBuy = null;
 
             for (var row : balances) {
-                String currency = String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
-                if ("BTC".equals(currency)) {
-                    btc = parseDoubleSafe(row.get("balance"));
+
+                String currency =
+                        String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
+
+                if (coin.equalsIgnoreCase(currency)) {
+
+                    coinBal = parseDoubleSafe(row.get("balance"));
 
                     double avg = parseDoubleSafe(row.get("avg_buy_price"));
                     if (avg > 0) avgBuy = avg;
@@ -178,107 +209,63 @@ public class TradeService {
                 }
             }
 
-            botState.setHasPosition(btc > 0.0);
-            botState.setPositionVolume(java.math.BigDecimal.valueOf(btc));
+            botState.setHasPosition(coinBal > 0.0);
+            botState.setPositionVolume(java.math.BigDecimal.valueOf(coinBal));
             botState.setPositionAvgBuyPrice(avgBuy);
+
         } catch (Exception e) {
             System.out.println("[POS_SYNC_FAIL] " + e.getMessage());
         }
     }
 
-    private boolean canBuyNow() {
-        if (botState.isHasOpenOrder()) return false;
-        if (botState.isHasPosition()) return false;
-
-        Instant last = botState.getLastBuyAt();
-        if (last != null && Duration.between(last, Instant.now()).getSeconds() < 60) return false;
-
-        return true;
-    }
-
-    private boolean canSellNow() {
-        if (botState.isHasOpenOrder()) return false;
-        if (!botState.isHasPosition()) return false;
-
-        Instant last = botState.getLastSellAt();
-        if (last != null && Duration.between(last, Instant.now()).getSeconds() < 60) return false;
-
-        return true;
-    }
-
     // ===== 메인 로직 =====
     public void executeAutoTrade(String coin) {
+
         if (!botRunning) return;
-        System.out.println("BOT tick");
 
         refreshOpenOrderIfFinished();
         syncPositionOnly();
 
-        double currentPrice = bithumbPrivateClient.getCurrentPrice(coin);
+        double currentPrice =
+                bithumbPrivateClient.getCurrentPrice(coin);
+
         if (currentPrice == 0) return;
 
-        TradeSignal signal = tradeStrategy.decide(coin, currentPrice);
+        TradeSignal signal =
+                tradeStrategy.decide(coin, currentPrice);
 
         if (signal.action() == TradeSignal.Action.BUY) {
-            if (!canBuyNow()) {
-                System.out.println("[SKIP BUY] hasOpenOrder=" + botState.isHasOpenOrder()
-                        + " hasPosition=" + botState.isHasPosition());
-                return;
-            }
 
-            Map<String, Object> res = tradeExecutor.buy(coin, currentPrice, signal.quantity());
-
-            Object uuid = res.get("uuid");
-            if (uuid != null) {
-                botState.setHasOpenOrder(true);
-                botState.setOpenOrderUuid(String.valueOf(uuid));
-                botState.setOpenOrderSide("bid");
-                botState.setOpenOrderCreatedAt(Instant.now());
-                botState.setLastBuyAt(Instant.now());
-            }
+            tradeExecutor.buy(coin, currentPrice, signal.quantity());
 
             tradeLogRepository.save(
                     new TradeLog(
-                            coin, "BUY", currentPrice, signal.quantity(),
+                            coin,
+                            "BUY",
+                            currentPrice,
+                            signal.quantity(),
                             tradeStrategy.getClass().getSimpleName(),
                             signal.reason()
                     )
             );
+
             saveBalanceSnapshot(coin);
+        }
 
-        } else if (signal.action() == TradeSignal.Action.SELL) {
-            if (!canSellNow()) {
-                System.out.println("[SKIP SELL] hasOpenOrder=" + botState.isHasOpenOrder()
-                        + " hasPosition=" + botState.isHasPosition());
-                return;
-            }
+        else if (signal.action() == TradeSignal.Action.SELL) {
 
-            // ✅ SELL 시점의 원가(평단) + 실현손익 계산
-            Double avgBuyAtSell = botState.getPositionAvgBuyPrice();
-            if (avgBuyAtSell == null || avgBuyAtSell <= 0) {
-                System.out.println("[WARN] avgBuyAtSell is null/0. pnl will be 0. avgBuyAtSell=" + avgBuyAtSell);
-            }
-            double realizedPnl = (avgBuyAtSell == null ? 0.0 : (currentPrice - avgBuyAtSell) * signal.quantity());
+            tradeExecutor.sell(coin, currentPrice, signal.quantity());
 
-            Map<String, Object> res = tradeExecutor.sell(coin, currentPrice, signal.quantity());
-
-            Object uuid = res.get("uuid");
-            if (uuid != null) {
-                botState.setHasOpenOrder(true);
-                botState.setOpenOrderUuid(String.valueOf(uuid));
-                botState.setOpenOrderSide("ask");
-                botState.setOpenOrderCreatedAt(Instant.now());
-                botState.setLastSellAt(Instant.now());
-            }
-
-            TradeLog sellLog = new TradeLog(
-                    coin, "SELL", currentPrice, signal.quantity(),
-                    tradeStrategy.getClass().getSimpleName(),
-                    signal.reason()
+            tradeLogRepository.save(
+                    new TradeLog(
+                            coin,
+                            "SELL",
+                            currentPrice,
+                            signal.quantity(),
+                            tradeStrategy.getClass().getSimpleName(),
+                            signal.reason()
+                    )
             );
-            sellLog.setAvgBuyAtTrade(avgBuyAtSell);
-            sellLog.setRealizedPnl(realizedPnl);
-            tradeLogRepository.save(sellLog);
 
             saveBalanceSnapshot(coin);
         }
@@ -289,6 +276,7 @@ public class TradeService {
     }
 
     private void saveBalanceSnapshot(String coin) {
+
         try {
             var balances = tradeExecutor.getBalance();
 
@@ -297,18 +285,21 @@ public class TradeService {
             Long avgBuy = null;
 
             for (var row : balances) {
-                String currency = String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
 
-                if ("KRW".equals(currency)) {
+                String currency =
+                        String.valueOf(row.getOrDefault("currency", "")).toUpperCase();
+
+                if ("KRW".equals(currency))
                     krwBal = parseLongSafe(row.get("balance"));
-                }
+
                 if (coin.equalsIgnoreCase(currency)) {
                     coinBal = parseDoubleSafe(row.get("balance"));
                     avgBuy = parseLongSafe(row.get("avg_buy_price"));
                 }
             }
 
-            long currentPx = Math.round(bithumbPrivateClient.getCurrentPrice(coin));
+            long currentPx =
+                    Math.round(bithumbPrivateClient.getCurrentPrice(coin));
 
             balanceSnapshotRepository.save(
                     new BalanceSnapshot(coin, krwBal, coinBal, avgBuy, currentPx)
@@ -322,8 +313,7 @@ public class TradeService {
     private Long parseLongSafe(Object v) {
         if (v == null) return null;
         try {
-            double d = Double.parseDouble(v.toString());
-            return (long) Math.floor(d);
+            return (long) Math.floor(Double.parseDouble(v.toString()));
         } catch (Exception e) {
             return null;
         }
