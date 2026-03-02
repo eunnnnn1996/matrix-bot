@@ -23,9 +23,9 @@ public class VolatilityBreakoutStrategy implements TradeStrategy {
     public TradeSignal decide(String coin, double currentPrice) {
         BotSettingsDto settings = botSettingsService.botSelect();
 
-        double k = settings.getK();                     // 매수 목표가 튜닝
-        double takeProfit = settings.getTakeProfit();   // 익절 0.2%
-        double stopLoss = settings.getStopLoss();       // 손절 0.2%
+        double k = settings.getK();                    
+        double takeProfit = settings.getTakeProfit();   
+        double stopLoss = settings.getStopLoss();    
         double quantity = settings.getQuantity();
 
         if (currentPrice == 0) {

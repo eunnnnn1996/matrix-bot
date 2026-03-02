@@ -25,7 +25,6 @@ import lombok.RequiredArgsConstructor;
 public class TradeService {
 
     private final BithumbPrivateClient bithumbPrivateClient;
-    private final TradeHistoryRepository tradeHistoryRepository;
     private final TradeExecutor tradeExecutor;
     private final TradeStrategy tradeStrategy;
     private final TradeLogRepository tradeLogRepository;
@@ -33,8 +32,9 @@ public class TradeService {
 
     private final BotState botState;
 
-    // ⭐ settings 서비스 추가 (캐시 사용)
+    // settings 서비스 추가 (캐시 사용)
     private final BotSettingsService botSettingsService;
+    private final EventService eventService;
 
     @Value("${trade.mode:paper}")
     private String tradeMode;
@@ -220,19 +220,17 @@ public class TradeService {
 
     // ===== 메인 로직 =====
     public void executeAutoTrade(String coin) {
-
         if (!botRunning) return;
 
+        System.out.println("BOT tick");
         refreshOpenOrderIfFinished();
         syncPositionOnly();
 
-        double currentPrice =
-                bithumbPrivateClient.getCurrentPrice(coin);
+        double currentPrice = bithumbPrivateClient.getCurrentPrice(coin);
 
         if (currentPrice == 0) return;
 
-        TradeSignal signal =
-                tradeStrategy.decide(coin, currentPrice);
+        TradeSignal signal = tradeStrategy.decide(coin, currentPrice);
 
         if (signal.action() == TradeSignal.Action.BUY) {
 
@@ -250,24 +248,54 @@ public class TradeService {
             );
 
             saveBalanceSnapshot(coin);
+
+            eventService.eventSave(
+                "ORDER",
+                "SUCCESS",
+                coin,
+                "BUY",
+                currentPrice,
+                signal.quantity(),
+                "[주문] " + coin + " 매수 " + signal.quantity()
+            );
         }
 
         else if (signal.action() == TradeSignal.Action.SELL) {
 
+            // 먼저 평균매수가 확보 (SELL 전에!)
+            Double avgBuy = botState.getPositionAvgBuyPrice();
+
             tradeExecutor.sell(coin, currentPrice, signal.quantity());
 
-            tradeLogRepository.save(
-                    new TradeLog(
-                            coin,
-                            "SELL",
-                            currentPrice,
-                            signal.quantity(),
-                            tradeStrategy.getClass().getSimpleName(),
-                            signal.reason()
-                    )
+            TradeLog sellLog = new TradeLog(
+                    coin,
+                    "SELL",
+                    currentPrice,
+                    signal.quantity(),
+                    tradeStrategy.getClass().getSimpleName(),
+                    signal.reason()
             );
 
+            if (avgBuy != null && avgBuy > 0) {
+                double realizedPnl =
+                        (currentPrice - avgBuy) * signal.quantity();
+
+                sellLog.setAvgBuyAtTrade(avgBuy);
+                sellLog.setRealizedPnl(realizedPnl);
+            }
+
+            tradeLogRepository.save(sellLog);
+
             saveBalanceSnapshot(coin);
+            eventService.eventSave(
+                "ORDER",
+                "SUCCESS",
+                coin,
+                "SELL",
+                currentPrice,
+                signal.quantity(),
+                "[주문] " + coin + " 매도 " + signal.quantity()
+            );
         }
     }
 

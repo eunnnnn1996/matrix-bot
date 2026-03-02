@@ -22,5 +22,7 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
 
     // 시작 이후 마지막 ID 값
     List<TradeLog> findTop50ByCoinAndIdGreaterThanOrderByIdAsc(String coin, Long id);
+    
+    Optional<TradeLog> findTopByCoinAndSideOrderByIdDesc(String coin, String side);
 }
 

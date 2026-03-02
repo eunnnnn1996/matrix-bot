@@ -26,3 +26,7 @@ trade:
   mode: ${TRADE_MODE:paper}             # paper | live
   live:
     confirm: ${TRADE_LIVE_CONFIRM:false} # live 모드에서 true 아니면 주문 막음
+
+#슬랙 발송
+slack:
+  webhookUrl: ${SLACK_WEBHOOK_URL:}
