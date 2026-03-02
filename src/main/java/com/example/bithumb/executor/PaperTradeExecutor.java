@@ -26,6 +26,7 @@ public class PaperTradeExecutor implements TradeExecutor {
     private BigDecimal krwBalance;
     private BigDecimal coinBalance = BigDecimal.ZERO;
     private BigDecimal avgBuyPrice = BigDecimal.ZERO;
+    private String holdingCoin = null;
 
     public PaperTradeExecutor(
             @Value("${trade.paper.initialKrw:77996844}") long initialKrw,
@@ -45,11 +46,15 @@ public class PaperTradeExecutor implements TradeExecutor {
 
     @Override
     public synchronized Map<String, Object> buy(
+        
             String coin,
             double price,
             double quantity
     ) {
-
+        if (coinBalance.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("[PAPER BUY] blocked: already holding qty=" + coinBalance);
+                return Map.of("status", "ALREADY_HOLDING");
+        }
         BigDecimal qty = BigDecimal.valueOf(quantity);
         BigDecimal px  = BigDecimal.valueOf(price);
 
@@ -80,6 +85,7 @@ public class PaperTradeExecutor implements TradeExecutor {
         krwBalance = krwBalance.subtract(cost);
         coinBalance = newCoin;
         avgBuyPrice = newAvg;
+        holdingCoin = coin;
 
         System.out.println("[PAPER BUY] " + coin
                 + " price=" + price
@@ -124,6 +130,7 @@ public class PaperTradeExecutor implements TradeExecutor {
 
         if (coinBalance.compareTo(BigDecimal.ZERO) == 0) {
             avgBuyPrice = BigDecimal.ZERO;
+            holdingCoin = null;
         }
 
         System.out.println("[PAPER SELL] " + coin
@@ -144,7 +151,7 @@ public class PaperTradeExecutor implements TradeExecutor {
     @Override
     public synchronized List<Map<String, Object>> getBalance() {
 
-        String coin = getCoin(); // ⭐ settings에서 가져옴
+        String coin = (holdingCoin != null) ? holdingCoin : botSettingsService.botSelect().getCoin();
 
         Map<String, Object> krw = Map.of(
                 "currency", "KRW",

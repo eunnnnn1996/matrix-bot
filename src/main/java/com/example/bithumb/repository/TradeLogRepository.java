@@ -24,5 +24,7 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
     List<TradeLog> findTop50ByCoinAndIdGreaterThanOrderByIdAsc(String coin, Long id);
     
     Optional<TradeLog> findTopByCoinAndSideOrderByIdDesc(String coin, String side);
+
+    Optional<TradeLog> findTopByCoinOrderByCreatedAtDesc(String coin);
 }
 

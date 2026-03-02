@@ -11,3 +11,4 @@ public class BithumbAutoTradeApplication {
         SpringApplication.run(BithumbAutoTradeApplication.class, args);
     }
 }
+ 

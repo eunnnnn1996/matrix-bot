@@ -22,7 +22,7 @@ public class TradeScheduler {
 
         if (!lock.compareAndSet(false, true)) return;
         try {
-            tradeService.executeAutoTrade("BTC");
+            tradeService.executeAutoTrade();
         } finally {
             lock.set(false);
         }

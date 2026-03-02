@@ -21,11 +21,6 @@ public class LiveTradeExecutor implements TradeExecutor {
     @Value("${trade.live.confirm:false}")
     private boolean liveConfirm;
 
-    @PostConstruct
-    public void debugMode() {
-        System.out.println("[DEBUG] tradeMode=live, liveConfirm=" + liveConfirm);
-    }
-
     @Override
     public List<Map<String, Object>> getBalance() {
         return bithumbPrivateClient.getBalance();
