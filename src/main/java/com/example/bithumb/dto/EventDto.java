@@ -25,6 +25,8 @@ public class EventDto {
 
     private String message;
 
+    private Double profit;
+
     // Entity → DTO 변환
     public static EventDto from(Event e) {
         return EventDto.builder()
@@ -37,6 +39,7 @@ public class EventDto {
                 .price(e.getPrice())
                 .qty(e.getQty())
                 .message(e.getMessage())
+                .profit(e.getProfit())
                 .build();
     }
 }

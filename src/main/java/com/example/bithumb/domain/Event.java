@@ -1,5 +1,6 @@
 package com.example.bithumb.domain;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.example.bithumb.dto.EventDto;
@@ -69,6 +70,10 @@ public class Event {
             createdAt = LocalDateTime.now();
         }
     }
+
+    // 매매 수익
+    @Column
+    private Double profit;
 
     // ⭐ DTO → Entity 변환
     public static Event from(EventDto dto) {

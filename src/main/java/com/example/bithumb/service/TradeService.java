@@ -270,7 +270,7 @@ public class TradeService {
         if (currentPrice == 0) return;
         // ===== 전략 신호 =====
         TradeSignal signal = tradeStrategy.decide(coin, currentPrice);
-        System.out.println("[SIGNAL] " + signal.action() + " reason=" + signal.reason());
+        System.out.println("[SIGNAL] " + signal.action() + " current=" + currentPrice + " target=" + signal.targetPrice() + " reason=" + signal.reason());
         // ===== 익절/손절 우선 체크 (보유중일 때만) =====
         if (botState.isHasPosition()) {
 
@@ -278,7 +278,7 @@ public class TradeService {
             if (avgBuyObj != null && avgBuyObj > 0) {
 
                 double avgBuy = avgBuyObj;
-
+                
                 double tpRate = botSettingsService.botSelect().getTakeProfit();
                 double slRate = botSettingsService.botSelect().getStopLoss();
 
@@ -304,11 +304,10 @@ public class TradeService {
                     );
 
                     // ⭐⭐⭐ 이거 추가 (핵심)
-                    double realizedPnl =
-                            (currentPrice - avgBuyObj) * qtyToSell;
+                    double profit = (currentPrice - avgBuyObj) * qtyToSell;
 
                     sellLog.setAvgBuyAtTrade(avgBuyObj);
-                    sellLog.setRealizedPnl(realizedPnl);
+                    sellLog.setRealizedPnl(profit);
 
                     tradeLogRepository.save(sellLog);
                     saveBalanceSnapshot(coin);
@@ -319,7 +318,8 @@ public class TradeService {
                             "SELL",
                             currentPrice,
                             signal.quantity(),
-                            "[주문] " + coin + " 강제매도 " + signal.quantity()
+                            "[주문] " + coin + " 강제매도 " + signal.quantity(),
+                            profit
                     );
                     syncPositionOnly();
                     // ✅ 쿨다운 시작 + 메서드 종료
@@ -380,7 +380,8 @@ public class TradeService {
                     "BUY",
                     currentPrice,
                     signal.quantity(),
-                    "[주문] " + coin + " 매수 " + signal.quantity()
+                    "[주문] " + coin + " 매수 " + signal.quantity(),
+                    0
             );
 
             slackNotifier.send("🔥 [매수] " + coin + " px=" + currentPrice + " 수량=" + signal.quantity());
@@ -414,12 +415,13 @@ public class TradeService {
                     signal.reason()
             );
 
+            double profit = 0.0;
+
             if (avgBuy != null && avgBuy > 0) {
-                double realizedPnl =
-                        (currentPrice - avgBuy) * signal.quantity();
+                profit = (currentPrice - avgBuy) * signal.quantity();
 
                 sellLog.setAvgBuyAtTrade(avgBuy);
-                sellLog.setRealizedPnl(realizedPnl);
+                sellLog.setRealizedPnl(profit);
             }
 
             tradeLogRepository.save(sellLog);
@@ -433,7 +435,9 @@ public class TradeService {
                     "SELL",
                     currentPrice,
                     signal.quantity(),
-                    "[주문] " + coin + " 매도 " + signal.quantity()
+                    "[주문] " + coin + " 매도 " + signal.quantity(),
+                    profit
+
             );
 
             slackNotifier.send("🔥 [매도] " + coin + " px=" + currentPrice + " qty=" + signal.quantity());

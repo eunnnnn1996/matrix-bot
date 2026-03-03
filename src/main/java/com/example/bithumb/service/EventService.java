@@ -29,7 +29,8 @@ public class EventService {
                           String side,
                           double price,
                           double qty,
-                          String message) {
+                          String message,
+                          double profit) {
 
         Event event = Event.builder()
                 .eventType(eventType)
@@ -39,6 +40,7 @@ public class EventService {
                 .price(price)
                 .qty(qty)
                 .message(message)
+                .profit(profit)
                 .build();
 
         eventRepository.save(event);

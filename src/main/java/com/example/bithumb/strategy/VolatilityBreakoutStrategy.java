@@ -71,7 +71,7 @@ public class VolatilityBreakoutStrategy implements TradeStrategy {
             }
         }
 
-        return new TradeSignal(TradeSignal.Action.HOLD, 0, targetPrice, "no signal");
+        return new TradeSignal(TradeSignal.Action.HOLD, 0, targetPrice, "no signal (need >= " + targetPrice + ")");
     }
 
     @Override
