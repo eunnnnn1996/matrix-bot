@@ -1,5 +1,9 @@
 package com.example.bithumb.strategy;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
 import org.springframework.stereotype.Component;
 
 import com.example.bithumb.service.CandleService;
@@ -16,62 +20,116 @@ public class VolatilityBreakoutStrategy implements TradeStrategy {
     private final CandleService candleService;
     private final BotState botState;
     private final BotSettingsService botSettingsService;
+
     private String targetDate = "";
     private double targetPrice = 0;
 
     @Override
     public TradeSignal decide(String coin, double currentPrice) {
+
         BotSettingsDto settings = botSettingsService.botSelect();
 
-        double k = settings.getK();                    
-        double takeProfit = settings.getTakeProfit();   
-        double stopLoss = settings.getStopLoss();    
+        double k = settings.getK();
+        double takeProfit = settings.getTakeProfit();
+        double stopLoss = settings.getStopLoss();
         double quantity = settings.getQuantity();
 
-        if (currentPrice == 0) {
-            return new TradeSignal(TradeSignal.Action.HOLD, 0, targetPrice, "price=0");
+        // 가격 방어
+        if (currentPrice <= 0) {
+            return new TradeSignal(
+                    TradeSignal.Action.HOLD,
+                    0,
+                    targetPrice,
+                    "invalid price"
+            );
         }
 
-        String today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString();
+        // TP/SL 방어
+        if (takeProfit <= 0 || stopLoss <= 0) {
+            return new TradeSignal(
+                    TradeSignal.Action.HOLD,
+                    0,
+                    targetPrice,
+                    "invalid tp/sl"
+            );
+        }
 
-        // 날짜 변경 시 목표가 갱신
+        String today = LocalDate.now(ZoneId.of("Asia/Seoul")).toString();
+
+        // 날짜 바뀌면 목표가 재계산
         if (!today.equals(targetDate)) {
+
             double open = candleService.getTodayOpen(coin);
             double range = candleService.getYesterdayRange(coin);
 
             targetPrice = open + range * k;
             targetDate = today;
 
-            return new TradeSignal(TradeSignal.Action.HOLD, 0, targetPrice, "target updated");
+            return new TradeSignal(
+                    TradeSignal.Action.HOLD,
+                    0,
+                    targetPrice,
+                    "target updated"
+            );
         }
 
-        // ✅ 보유 여부/매수가 기준은 "전략 내부 메모리"가 아니라 거래소 동기화 상태(BotState)를 사용
         boolean hasPosition = botState.isHasPosition();
-        Double avgBuy = botState.getPositionAvgBuyPrice();
+        Double avgBuy = botState.getPositionAvgBuyPrice();  // Double 그대로 사용
+        BigDecimal posVolumeObj = botState.getPositionVolume();
 
-        // 매수 조건: 목표가 돌파 + 미보유
-        if (!hasPosition && currentPrice >= targetPrice) {
-            return new TradeSignal(TradeSignal.Action.BUY, quantity, targetPrice, "breakout");
-        }
+        double posQty = (posVolumeObj == null)
+                ? 0.0
+                : posVolumeObj.doubleValue();
 
-        // 매도 조건: 평균매수가 기준 익절/손절 + 보유중
-        if (hasPosition && avgBuy != null && avgBuy > 0) {
+        // ==============================
+        // 1️⃣ SELL 먼저 판단
+        // ==============================
+        if (hasPosition && avgBuy != null && avgBuy > 0 && posQty > 0) {
+
             double tpPrice = avgBuy * (1 + takeProfit);
             double slPrice = avgBuy * (1 - stopLoss);
 
-            // 가능하면 보유수량 전량 매도(부분매도 원하면 이 정책만 변경)
-            double posQty = botState.getPositionVolume() == null ? 0.0 : botState.getPositionVolume().doubleValue();
-            double sellQty = posQty > 0 ? posQty : quantity;
-
             if (currentPrice >= tpPrice) {
-                return new TradeSignal(TradeSignal.Action.SELL, sellQty, targetPrice, "take profit");
+                return new TradeSignal(
+                        TradeSignal.Action.SELL,
+                        posQty,
+                        avgBuy,
+                        "take profit"
+                );
             }
+
             if (currentPrice <= slPrice) {
-                return new TradeSignal(TradeSignal.Action.SELL, sellQty, targetPrice, "stop loss");
+                return new TradeSignal(
+                        TradeSignal.Action.SELL,
+                        posQty,
+                        avgBuy,
+                        "stop loss"
+                );
             }
         }
 
-        return new TradeSignal(TradeSignal.Action.HOLD, 0, targetPrice, "no signal (need >= " + targetPrice + ")");
+        // ==============================
+        // 2️⃣ BUY 판단
+        // ==============================
+        if (!hasPosition && currentPrice >= targetPrice) {
+
+            return new TradeSignal(
+                    TradeSignal.Action.BUY,
+                    quantity,
+                    targetPrice,
+                    "breakout"
+            );
+        }
+
+        // ==============================
+        // 3️⃣ HOLD
+        // ==============================
+        return new TradeSignal(
+                TradeSignal.Action.HOLD,
+                0,
+                targetPrice,
+                "no signal"
+        );
     }
 
     @Override

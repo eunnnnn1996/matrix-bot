@@ -1,17 +1,15 @@
 package com.example.bithumb.executor;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.List;
-import java.util.Map;
-
+import com.example.bithumb.service.BotSettingsService;
+import com.example.bithumb.service.BotState;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.example.bithumb.service.BotSettingsService;
-
-import lombok.RequiredArgsConstructor;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
 
 @Component
 @ConditionalOnProperty(
@@ -22,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 public class PaperTradeExecutor implements TradeExecutor {
 
     private final BotSettingsService botSettingsService;
+    private final BotState botState;
 
     private BigDecimal krwBalance;
     private BigDecimal coinBalance = BigDecimal.ZERO;
@@ -30,69 +29,51 @@ public class PaperTradeExecutor implements TradeExecutor {
 
     public PaperTradeExecutor(
             @Value("${trade.paper.initialKrw:77996844}") long initialKrw,
-            BotSettingsService botSettingsService
+            BotSettingsService botSettingsService,
+            BotState botState
     ) {
         this.botSettingsService = botSettingsService;
+        this.botState = botState;
         this.krwBalance = BigDecimal.valueOf(initialKrw);
-
-        System.out.println("[PAPER] initialKrw=" + initialKrw);
-    }
-    // ===============================
-    // helper
-    // ===============================
-    private String getCoin() {
-        return botSettingsService.botSelect().getCoin();
     }
 
+    // ===============================
+    // BUY
+    // ===============================
     @Override
     public synchronized Map<String, Object> buy(
-        
             String coin,
             double price,
             double quantity
     ) {
+
         if (coinBalance.compareTo(BigDecimal.ZERO) > 0) {
-                System.out.println("[PAPER BUY] blocked: already holding qty=" + coinBalance);
-                return Map.of("status", "ALREADY_HOLDING");
+            return Map.of("success", false, "message", "already holding");
         }
+
         BigDecimal qty = BigDecimal.valueOf(quantity);
         BigDecimal px  = BigDecimal.valueOf(price);
-
         BigDecimal cost = px.multiply(qty);
 
         if (krwBalance.compareTo(cost) < 0) {
-            System.out.println("[PAPER BUY FAIL] not enough KRW. need="
-                    + cost + " have=" + krwBalance);
-
-            return Map.of(
-                    "success", false,
-                    "mode", "paper",
-                    "message", "not enough KRW"
-            );
+            return Map.of("success", false, "message", "not enough KRW");
         }
 
-        // 평단 계산
-        BigDecimal prevValue = avgBuyPrice.multiply(coinBalance);
-        BigDecimal addValue  = px.multiply(qty);
-        BigDecimal newCoin   = coinBalance.add(qty);
+        BigDecimal newCoin = coinBalance.add(qty);
 
-        BigDecimal newAvg = BigDecimal.ZERO;
-        if (newCoin.compareTo(BigDecimal.ZERO) > 0) {
-            newAvg = prevValue.add(addValue)
-                    .divide(newCoin, 0, RoundingMode.HALF_UP);
-        }
+        BigDecimal newAvg = px
+                .multiply(qty)
+                .divide(newCoin, 8, RoundingMode.HALF_UP);
 
         krwBalance = krwBalance.subtract(cost);
         coinBalance = newCoin;
         avgBuyPrice = newAvg;
         holdingCoin = coin;
 
-        System.out.println("[PAPER BUY] " + coin
-                + " price=" + price
-                + " qty=" + quantity
-                + " krw=" + krwBalance
-                + " " + coin + "=" + coinBalance
-                + " avgBuy=" + avgBuyPrice);
+        // 🔥 BotState 동기화
+        botState.setHasPosition(true);
+        botState.setPositionVolume(coinBalance);
+        botState.setPositionAvgBuyPrice(avgBuyPrice.doubleValue());
 
         return Map.of(
                 "success", true,
@@ -102,6 +83,9 @@ public class PaperTradeExecutor implements TradeExecutor {
         );
     }
 
+    // ===============================
+    // SELL
+    // ===============================
     @Override
     public synchronized Map<String, Object> sell(
             String coin,
@@ -113,14 +97,7 @@ public class PaperTradeExecutor implements TradeExecutor {
         BigDecimal px  = BigDecimal.valueOf(price);
 
         if (coinBalance.compareTo(qty) < 0) {
-            System.out.println("[PAPER SELL FAIL] not enough " + coin
-                    + ". sell=" + qty + " have=" + coinBalance);
-
-            return Map.of(
-                    "success", false,
-                    "mode", "paper",
-                    "message", "not enough coin"
-            );
+            return Map.of("success", false, "message", "not enough coin");
         }
 
         BigDecimal revenue = px.multiply(qty);
@@ -131,14 +108,13 @@ public class PaperTradeExecutor implements TradeExecutor {
         if (coinBalance.compareTo(BigDecimal.ZERO) == 0) {
             avgBuyPrice = BigDecimal.ZERO;
             holdingCoin = null;
-        }
 
-        System.out.println("[PAPER SELL] " + coin
-                + " price=" + price
-                + " qty=" + quantity
-                + " krw=" + krwBalance
-                + " " + coin + "=" + coinBalance
-                + " avgBuy=" + avgBuyPrice);
+            botState.setHasPosition(false);
+            botState.setPositionVolume(BigDecimal.ZERO);
+            botState.setPositionAvgBuyPrice(null);
+        } else {
+            botState.setPositionVolume(coinBalance);
+        }
 
         return Map.of(
                 "success", true,
@@ -148,10 +124,15 @@ public class PaperTradeExecutor implements TradeExecutor {
         );
     }
 
+    // ===============================
+    // BALANCE
+    // ===============================
     @Override
     public synchronized List<Map<String, Object>> getBalance() {
 
-        String coin = (holdingCoin != null) ? holdingCoin : botSettingsService.botSelect().getCoin();
+        String coin = (holdingCoin != null)
+                ? holdingCoin
+                : botSettingsService.botSelect().getCoin();
 
         Map<String, Object> krw = Map.of(
                 "currency", "KRW",
