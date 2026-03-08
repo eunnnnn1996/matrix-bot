@@ -15,6 +15,12 @@ spring:
     serialization:
       INDENT_OUTPUT: true
 
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
 bithumb:
   api:
     url: ${BITHUMB_API_URL:https://api.bithumb.com}
