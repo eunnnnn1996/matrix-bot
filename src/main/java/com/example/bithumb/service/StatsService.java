@@ -31,6 +31,6 @@ public class StatsService {
             from = LocalDateTime.of(2000,1,1,0,0);
         }
 
-        return statsRepository.getStats(from);
+        return statsRepository.getTotalProfit(from);
     }
 }
