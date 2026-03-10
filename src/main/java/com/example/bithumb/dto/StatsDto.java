@@ -12,8 +12,9 @@ public class StatsDto {
     private Long maxProfit;
     private Long minLoss;
     private Long profitCnt;
+    private Long lossCnt;
 
-    public StatsDto(Long totalProfit, Double winRate, Long totalTrade, Long avgProfit, Long maxProfit, Long minLoss, Long profitCnt) {
+    public StatsDto(Long totalProfit, Double winRate, Long totalTrade, Long avgProfit, Long maxProfit, Long minLoss, Long profitCnt, Long lossCnt) {
         this.totalProfit = totalProfit;
         this.winRate = winRate;
         this.totalTrade = totalTrade;
@@ -21,5 +22,6 @@ public class StatsDto {
         this.maxProfit = maxProfit;
         this.minLoss = minLoss;
         this.profitCnt = profitCnt;
+        this.lossCnt = lossCnt;
     }
 }
