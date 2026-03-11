@@ -4,7 +4,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.bithumb.dto.StatsDto;
+import com.example.bithumb.dto.StatsResponseDto;
 import com.example.bithumb.service.StatsService;
 
 import lombok.RequiredArgsConstructor;
@@ -13,10 +13,11 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class StatsController {
+
     private final StatsService statsService;
 
     @GetMapping("/getProfit")
-    public StatsDto getProfit(String period) {
+    public StatsResponseDto getProfit(String period) {
         return statsService.getProfit(period);
     }
 }

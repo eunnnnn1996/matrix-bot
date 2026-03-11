@@ -1,10 +1,13 @@
 package com.example.bithumb.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
 import com.example.bithumb.dto.StatsDto;
+import com.example.bithumb.dto.StatsResponseDto;
+import com.example.bithumb.dto.StatsTrendDto;
 import com.example.bithumb.repository.StatsRepositoryCustom;
 
 import lombok.RequiredArgsConstructor;
@@ -12,9 +15,10 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class StatsService {
+
     private final StatsRepositoryCustom statsRepository;
 
-    public StatsDto getProfit(String period){
+    public StatsResponseDto getProfit(String period){
 
         LocalDateTime from;
 
@@ -31,6 +35,9 @@ public class StatsService {
             from = LocalDateTime.of(2000,1,1,0,0);
         }
 
-        return statsRepository.getTotalProfit(from);
+        StatsDto summary = statsRepository.getTotalProfit(from);
+        List<StatsTrendDto> trend = statsRepository.getTrend(from);
+
+        return new StatsResponseDto(summary, trend);
     }
 }
