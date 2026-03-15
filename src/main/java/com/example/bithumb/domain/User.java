@@ -2,19 +2,9 @@ package com.example.bithumb.domain;
 
 import java.time.LocalDateTime;
 
-import javax.management.relation.Role;
-
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-import org.springframework.data.annotation.Id;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,10 +14,15 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class SignUp {
+public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "SEQ_USERS")
+    @SequenceGenerator(
+        name = "SEQ_USERS",
+        sequenceName = "SEQ_USERS",
+        allocationSize = 1
+    )
     private Long userId;
 
     @Column(nullable = false, length = 50)
@@ -44,7 +39,7 @@ public class SignUp {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
-
-    @UpdateTimestamp
+    
+    @CreationTimestamp
     private LocalDateTime updatedAt;
 }
